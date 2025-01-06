@@ -16,7 +16,7 @@
                             <h1>Questions are waiting!</h1>
                         </div>
                         <div class="btn-wrapper">
-                            <a class="btn btn-effect-3 btn-white" href="shop.php">Answer <i class="icon-next"></i></a>
+                            <a class="btn btn-effect-3 btn-white" href="publicQ&A.php">Answer <i class="icon-next"></i></a>
                         </div>
                     </div>
                 </div>

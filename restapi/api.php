@@ -1,7 +1,10 @@
 <?php
+session_start();
 header("Content-Type: application/json");
 include 'connection.php';
-
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 $method = $_SERVER['REQUEST_METHOD'];
 // Retrieve query parameters
 $resource = isset($_GET['resource']) ? $_GET['resource'] : null; // e.g., 'users', 'posts'
@@ -38,6 +41,9 @@ switch ($resource) {
         break;
     case 'polls':
         handlePolls($pdo, $method, $id);
+        break;
+    case 'comments':
+        handleComments($pdo, $method, $id); 
         break;
     default:
         http_response_code(404);
@@ -365,75 +371,148 @@ function handleChallenges($pdo, $method, $id) {
 function handlePosts($pdo, $method, $id) {
     switch ($method) {
         case 'GET':
-            try {
-                if ($id) {
-                    // Get a single post with user info
-                    $stmt = $pdo->prepare("
-                        SELECT Posts.*, GROUP_CONCAT(Tags.Name) as Tags, Users.Username 
-                        FROM Posts
-                        LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
-                        LEFT JOIN Tags ON PostTags.TagId = Tags.Id
-                        JOIN Users ON Posts.UserId = Users.Id
-                        WHERE Posts.Id = ?
-                        GROUP BY Posts.Id
-                    ");
-                    $stmt->execute([$id]);
-                    $post = $stmt->fetch(PDO::FETCH_ASSOC);
-                    echo json_encode($post ?: ['error' => 'Post not found']);
-                } else {
-                    // Get all posts with user info
-                    $stmt = $pdo->query("
-                        SELECT Posts.*, GROUP_CONCAT(Tags.Name) as Tags, Users.Username 
-                        FROM Posts
-                        LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
-                        LEFT JOIN Tags ON PostTags.TagId = Tags.Id
-                        JOIN Users ON Posts.UserId = Users.Id
-                        GROUP BY Posts.Id
-                    ");
-                    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
-                }
+             try {
+        if ($id) {
+            // Get a single post with user info
+            $stmt = $pdo->prepare("
+                SELECT 
+                    Posts.*, 
+                    GROUP_CONCAT(Tags.Name) as Tags, 
+                    Users.Username,
+                    Users.Profile_Picture, 
+                    EXISTS (
+                        SELECT 1 
+                        FROM PostLikes 
+                        WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
+                    ) as liked 
+                FROM Posts
+                LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
+                LEFT JOIN Tags ON PostTags.TagId = Tags.Id
+                JOIN Users ON Posts.UserId = Users.Id
+                WHERE Posts.Id = ?
+                GROUP BY Posts.Id
+            ");
+            $stmt->execute([$_SESSION['user_id'], $id]); // Pass logged-in UserId
+            $post = $stmt->fetch(PDO::FETCH_ASSOC);
+            echo json_encode($post ?: ['error' => 'Post not found']);
+        } else {
+            // Get all posts with user info
+            $stmt = $pdo->prepare("
+                SELECT 
+                    Posts.*, 
+                    GROUP_CONCAT(Tags.Name) as Tags, 
+                    Users.Username, 
+                    Users.Profile_Picture,
+                    EXISTS (
+                        SELECT 1 
+                        FROM PostLikes 
+                        WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
+                    ) as liked 
+                FROM Posts
+                LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
+                LEFT JOIN Tags ON PostTags.TagId = Tags.Id
+                JOIN Users ON Posts.UserId = Users.Id
+                GROUP BY Posts.Id
+            ");
+            $stmt->execute([$_SESSION['user_id']]); // Pass logged-in UserId
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        }
             } catch (Exception $e) {
                 http_response_code(500);
                 echo json_encode(['error' => $e->getMessage()]);
             }
             break;
-            break;
-
         case 'POST':
             try {
                 $data = json_decode(file_get_contents('php://input'), true);
-
+        
                 if (isset($data['action']) && $data['action'] === 'like') {
-                    // Handle likes
-                    $increment = $data['increment'] ? 1 : -1;
-                    $stmt = $pdo->prepare("UPDATE Posts SET Likes = Likes + ? WHERE Id = ?");
-                    $stmt->execute([$increment, $id]);
-                    echo json_encode(['message' => 'Likes updated', 'success' => true]);
+                    $userId = $data['userId'] ?? null;
+                    $postId = $data['postId'] ?? null;
+                    $increment = $data['increment'] ?? true; // true to like, false to unlike
+        
+                    if (!$userId || !$postId) {
+                        throw new Exception('UserId and PostId are required for the like action.');
+                    }
+        
+                    if ($increment) {
+                        // Add a like
+                        $stmt = $pdo->prepare("SELECT * FROM PostLikes WHERE UserId = ? AND PostId = ?");
+                        $stmt->execute([$userId, $postId]);
+        
+                        if ($stmt->rowCount() > 0) {
+                            throw new Exception('You have already liked this post.');
+                        }
+        
+                        $stmt = $pdo->prepare("INSERT INTO PostLikes (UserId, PostId) VALUES (?, ?)");
+                        $stmt->execute([$userId, $postId]);
+        
+                        $stmt = $pdo->prepare("UPDATE Posts SET Likes = Likes + 1 WHERE Id = ?");
+                        $stmt->execute([$postId]);
+                        echo json_encode(['message' => 'Like added successfully', 'success' => true]);
+                    } else {
+                        // Remove a like
+                        $stmt = $pdo->prepare("SELECT * FROM PostLikes WHERE UserId = ? AND PostId = ?");
+                        $stmt->execute([$userId, $postId]);
+        
+                        if ($stmt->rowCount() === 0) {
+                            throw new Exception('You have not liked this post.');
+                        }
+        
+                        $stmt = $pdo->prepare("DELETE FROM PostLikes WHERE UserId = ? AND PostId = ?");
+                        $stmt->execute([$userId, $postId]);
+        
+                        $stmt = $pdo->prepare("UPDATE Posts SET Likes = Likes - 1 WHERE Id = ?");
+                        $stmt->execute([$postId]);
+                        echo json_encode(['message' => 'Like removed successfully', 'success' => true]);
+                    }
                 } elseif (isset($data['action']) && $data['action'] === 'comment') {
                     // Handle comments
-                    $comment = $data['comment'];
+                    $id = $data['postId'] ?? null; // Ensure the postId is fetched
+                    if (!$id) {
+                        throw new Exception('Post ID is required for comment action');
+                    }
+        
+                    $comment = $data['comment'] ?? null;
+                    if (!$comment) {
+                        throw new Exception('Comment text is required');
+                    }
+        
+                    // Insert comment into the Comments table
                     $stmt = $pdo->prepare("INSERT INTO Comments (PostId, CommentText, CreatedAt) VALUES (?, ?, NOW())");
                     $stmt->execute([$id, $comment]);
-
+        
+                    // Increment the Comments count in the Posts table
                     $stmt = $pdo->prepare("UPDATE Posts SET Comments = Comments + 1 WHERE Id = ?");
                     $stmt->execute([$id]);
-
+        
                     echo json_encode(['message' => 'Comment added', 'success' => true]);
-                } else {
+                } 
+                else {
                     // Handle new post creation
-                    $stmt = $pdo->prepare("INSERT INTO Posts (UserId, Title, Description, Status) VALUES (?, ?, ?, 'Published')");
-                    $stmt->execute([$data['UserId'], $data['Title'], $data['Description']]);
-                    $postId = $pdo->lastInsertId();
+                    $userId = $data['UserId'] ?? null;
+        $title = $data['Title'] ?? null;
+        $description = $data['Description'] ?? null;
 
-                    if (!empty($data['TagId'])) {
-                        $tagStmt = $pdo->prepare("INSERT INTO PostTags (PostId, TagId) VALUES (?, ?)");
-                        $tagStmt->execute([$postId, $data['TagId']]);
-                    }
+        if (!$userId || !$title || !$description) {
+            throw new Exception('UserId, Title, and Description are required');
+        }
 
-                    echo json_encode(['message' => 'Post created', 'PostId' => $postId]);
-                }
+        $stmt = $pdo->prepare("INSERT INTO Posts (UserId, Title, Description, Status) VALUES (?, ?, ?, 'Published')");
+        $stmt->execute([$userId, $title, $description]);
+        $postId = $pdo->lastInsertId();
+
+        if (!empty($data['TagId']) && is_array($data['TagId'])) {
+            $tagStmt = $pdo->prepare("INSERT INTO PostTags (PostId, TagId) VALUES (?, ?)");
+            foreach ($data['TagId'] as $tagId) {
+                $tagStmt->execute([$postId, $tagId]);
+            }
+        }
+
+        echo json_encode(['message' => 'Post created', 'PostId' => $postId]);
+        }
             } catch (Exception $e) {
-                http_response_code(500);
+                http_response_code(400);
                 echo json_encode(['error' => $e->getMessage()]);
             }
             break;
@@ -561,4 +640,102 @@ function handlePolls($pdo, $method, $id) {
             break;
     }
 }
+    function handleComments($pdo, $method, $id) {
+        switch ($method) {
+            case 'GET':
+                // Get comments for a specific post
+                if (isset($_GET['postId'])) {
+                    $postId = intval($_GET['postId']);
+                    $stmt = $pdo->prepare("
+                        SELECT Comments.*, Users.Username, Users.Profile_Picture 
+                        FROM Comments 
+                        JOIN Users ON Comments.UserId = Users.Id 
+                        WHERE Comments.PostId = ?
+                        ORDER BY Comments.CreatedAt DESC
+                    ");
+                    $stmt->execute([$postId]);
+                    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+                } else {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Post ID is required to fetch comments']);
+                }
+                break;
+    
+                case 'POST':
+                    // Add a new comment
+                    $data = json_decode(file_get_contents('php://input'), true);
+                    $postId = $data['postId'] ?? null;
+                    $userId = $data['userId'] ?? null;
+                    $commentText = $data['commentText'] ?? null;
+                
+                    if (!$postId || !$userId || !$commentText) {
+                        http_response_code(400);
+                        echo json_encode(['error' => 'Post ID, User ID, and Comment Text are required']);
+                        return;
+                    }
+                
+                    try {
+                        // Insert the comment into the Comments table
+                        $stmt = $pdo->prepare("
+                            INSERT INTO Comments (PostId, UserId, CommentText, CreatedAt) 
+                            VALUES (?, ?, ?, NOW())
+                        ");
+                        $stmt->execute([$postId, $userId, $commentText]);
+                
+                        // Increment the comment count in the Posts table
+                        $stmt = $pdo->prepare("
+                            UPDATE Posts 
+                            SET Comments = Comments + 1 
+                            WHERE Id = ?
+                        ");
+                        $stmt->execute([$postId]);
+                
+                        echo json_encode(['success' => true, 'message' => 'Comment added successfully']);
+                    } catch (Exception $e) {
+                        http_response_code(500);
+                        echo json_encode(['error' => 'Error adding comment: ' . $e->getMessage()]);
+                    }
+                    break;
+                
+    
+            case 'PUT':
+                // Update an existing comment
+                if (!$id) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Comment ID is required to update']);
+                    return;
+                }
+                $data = json_decode(file_get_contents('php://input'), true);
+                $commentText = $data['commentText'] ?? null;
+    
+                if (!$commentText) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Comment Text is required']);
+                    return;
+                }
+    
+                $stmt = $pdo->prepare("UPDATE Comments SET CommentText = ? WHERE Id = ?");
+                $stmt->execute([$commentText, $id]);
+                echo json_encode(['message' => 'Comment updated successfully']);
+                break;
+    
+            case 'DELETE':
+                // Delete a comment
+                if (!$id) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Comment ID is required to delete']);
+                    return;
+                }
+    
+                $stmt = $pdo->prepare("DELETE FROM Comments WHERE Id = ?");
+                $stmt->execute([$id]);
+                echo json_encode(['message' => 'Comment deleted successfully']);
+                break;
+    
+            default:
+                http_response_code(405);
+                echo json_encode(['error' => 'Method not allowed']);
+                break;
+        }
+    }    
 ?>

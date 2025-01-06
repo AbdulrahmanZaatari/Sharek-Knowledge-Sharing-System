@@ -171,7 +171,7 @@ include("./role_based_header.php");
         <div class="form-group">
             <label>Profile Picture</label>
             <div class="mb-3">
-            <img src="<?php echo htmlspecialchars($user['Profile_Picture']); ?>" alt="Profile Picture" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 2px solid #ddd;">
+            <img src="<?php echo 'restapi/' . htmlspecialchars($user['Profile_Picture']); ?>" alt="Profile Picture" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 2px solid #ddd;">
             </div>
         </div>
         <form action="update_profile.php" method="POST" enctype="multipart/form-data">

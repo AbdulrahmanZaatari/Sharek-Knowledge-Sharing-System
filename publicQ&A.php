@@ -1,6 +1,8 @@
 <?php
 session_start();
-include("./role_based_header.php"); // Include the header
+include("./role_based_header.php");
+// Pass UserId from session to frontend
+echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";</script>";
 ?>
 
 <div class="container">
@@ -55,35 +57,44 @@ include("./role_based_header.php"); // Include the header
             }
 
             data.forEach(post => {
-                const qaContainer = document.createElement('div');
-                qaContainer.className = 'qa-container';
+    const qaContainer = document.createElement('div');
+    qaContainer.className = 'qa-container';
 
-                qaContainer.innerHTML = `
-                    <div class="post-card">
-                        <div class="post-header">
-                            <div class="profile-pic"></div>
-                            <span class="user-name">${post.Username}</span>
-                        </div>
-                        <hr class="post-divider">
-                        <div class="post-content">
-                            <h2 class="post-title">${post.Title}</h2>
-                            <div class="qa-tags">Tags: ${post.Tags || 'None'}</div>
-                            <div class="qa-meta">
-                                Posted on: ${new Date(post.CreatedAt).toLocaleDateString()}
-                                <div class="post-actions">
-                                    <button class="like-btn ${post.liked ? 'liked' : ''}" onclick="toggleLike(${post.Id}, this)">
-                                        ${post.Likes} <i class="fa fa-thumbs-up"></i>
-                                    </button>
-                                    <button class="comment-btn" onclick="openCommentModal(${post.Id})">
-                                        ${post.Comments} <i class="fa fa-comment"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+    const profilePicture = post.Profile_Picture
+        ? `restapi/${post.Profile_Picture}`
+        : 'restapi/uploads/profile_pictures/default.jpg';
+
+    qaContainer.innerHTML = `
+        <div class="post-card">
+            <div class="post-header">
+                <img src="${profilePicture}" alt="Profile Picture" class="profile-pic">
+                <span class="user-name">${post.Username}</span>
+            </div>
+          
+            <h2 class="post-title">
+            <a href="postDetails.php?postId=${post.Id}" class="post-link">${post.Title}</a>
+            </h2>
+
+            <hr class="post-divider">
+            <div class="post-content"><b> Content: ${post.Description}</b></div>
+                <div class="qa-tags">Tags: ${post.Tags || 'None'}</div>
+                <div class="qa-meta">
+                    Posted on: ${new Date(post.CreatedAt).toLocaleDateString()}
+                    <div class="post-actions">
+                        <button class="like-btn ${post.liked ? 'liked' : ''}" onclick="toggleLike(${post.Id}, this)">
+                            ${post.Likes} <i class="fa fa-thumbs-up"></i>
+                        </button>
+                        <button class="comment-btn" onclick="openCommentModal(${post.Id})">
+                            ${post.comments || 0} <i class="fa fa-comment"></i>
+                        </button>
                     </div>
-                `;
-                qaList.appendChild(qaContainer);
-            });
+                </div>
+            </div>
+        </div>
+    `;
+    qaList.appendChild(qaContainer);
+});
+
         })
         .catch(error => {
             console.error('Error fetching posts:', error);
@@ -93,43 +104,43 @@ include("./role_based_header.php"); // Include the header
 
     // Like or unlike a post
     function toggleLike(postId, button) {
-        const liked = button.classList.contains('liked');
-        fetch('restapi/api.php?resource=posts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'like', increment: !liked, postId })
+    const liked = button.classList.contains('liked'); // Check if the post is already liked
+    const increment = !liked; // Increment if not liked, decrement if already liked
+
+    if (!USER_ID) {
+        alert("You must be logged in to like or unlike a post.");
+        return;
+    }
+
+    fetch('restapi/api.php?resource=posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'like',
+            userId: USER_ID,
+            postId: postId,
+            increment: increment
         })
+    })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                const likes = parseInt(button.innerText) + (liked ? -1 : 1);
-                button.innerText = `${likes} `;
-                button.appendChild(document.createElement('i')).className = 'fa fa-thumbs-up';
-                button.classList.toggle('liked');
+                // Update the like count and toggle neon orange
+                const likes = parseInt(button.innerText) + (increment ? 1 : -1); // Adjust likes count
+                button.innerHTML = `${likes} <i class="fa fa-thumbs-up"></i>`;
+                button.classList.toggle('liked'); // Toggle the neon border
+            } else {
+                console.error("Error:", data.error);
+                alert(data.error);
             }
         })
-        .catch(error => console.error('Error liking post:', error));
-    }
+        .catch(error => console.error("Error liking or unliking post:", error));
+}
 
-    // Open the comment modal
-    function openCommentModal(postId) {
-        const comment = prompt("Write your comment:");
-        if (comment) {
-            fetch('restapi/api.php?resource=posts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'comment', comment, postId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Comment added successfully!');
-                    location.reload();
-                }
-            })
-            .catch(error => console.error('Error adding comment:', error));
-        }
-    }
+
+
+
+
 
     // Modal handling
     function openModal() {
@@ -143,26 +154,43 @@ include("./role_based_header.php"); // Include the header
     }
 
     function createPost() {
-        const title = document.getElementById('postTitle').value;
-        const description = document.getElementById('postDescription').value;
-        const tags = document.getElementById('postTags').value;
+    const title = document.getElementById('postTitle').value;
+    const description = document.getElementById('postDescription').value;
+    const tags = document.getElementById('postTags').value;
 
-        if (!title || !description) {
-            alert('Title and description are required.');
-            return;
-        }
+    if (!title || !description) {
+        alert('Title and description are required.');
+        return;
+    }
 
-        // Save the post via API
-        fetch('restapi/api.php?resource=posts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ Title: title, Description: description, Tags: tags })
+    if (!USER_ID) {
+        alert('User is not logged in.');
+        return;
+    }
+
+    // Save the post via API
+    fetch('restapi/api.php?resource=posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            UserId: USER_ID,
+            Title: title,
+            Description: description,
+            Tags: tags
         })
+    })
         .then(response => response.json())
         .then(data => {
-            alert('Post created successfully!');
-            location.reload();
+            if (data.error) {
+                console.error('Error:', data.error);
+                alert(`Error: ${data.error}`);
+            } else {
+                alert('Post created successfully!');
+                location.reload();
+            }
         })
         .catch(error => console.error('Error creating post:', error));
-    }
+}
+
+
 </script>
