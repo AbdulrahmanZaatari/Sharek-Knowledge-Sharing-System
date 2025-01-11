@@ -15121,6 +15121,34 @@ h2.section-title {
   margin-bottom: 5px; /* Reduce space below the divider */
 }
 
+.category-pill {
+  background-color: #007bff;
+  color: white;
+  border-radius: 20px;
+  padding: 5px 10px;
+  margin-right: 5px;
+  font-size: 14px;
+  display: inline-block;
+}
+
+.tag-pill {
+  background-color: #28a745;
+  color: white;
+  border-radius: 20px;
+  padding: 5px 10px;
+  margin-right: 5px;
+  font-size: 12px;
+  display: inline-block;
+}
+
+.filters select {
+  padding: 8px;
+  margin: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+
 .like-btn, .comment-btn {
   background: transparent;
   border: 2px solid orange;

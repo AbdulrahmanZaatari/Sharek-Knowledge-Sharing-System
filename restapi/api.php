@@ -371,57 +371,86 @@ function handleChallenges($pdo, $method, $id) {
 function handlePosts($pdo, $method, $id) {
     switch ($method) {
         case 'GET':
-             try {
-        if ($id) {
-            // Get a single post with user info
-            $stmt = $pdo->prepare("
-                SELECT 
-                    Posts.*, 
-                    GROUP_CONCAT(Tags.Name) as Tags, 
-                    Users.Username,
-                    Users.Profile_Picture, 
-                    EXISTS (
-                        SELECT 1 
-                        FROM PostLikes 
-                        WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
-                    ) as liked 
-                FROM Posts
-                LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
-                LEFT JOIN Tags ON PostTags.TagId = Tags.Id
-                JOIN Users ON Posts.UserId = Users.Id
-                WHERE Posts.Id = ?
-                GROUP BY Posts.Id
-            ");
-            $stmt->execute([$_SESSION['user_id'], $id]); // Pass logged-in UserId
-            $post = $stmt->fetch(PDO::FETCH_ASSOC);
-            echo json_encode($post ?: ['error' => 'Post not found']);
-        } else {
-            // Get all posts with user info
-            $stmt = $pdo->prepare("
-                SELECT 
-                    Posts.*, 
-                    GROUP_CONCAT(Tags.Name) as Tags, 
-                    Users.Username, 
-                    Users.Profile_Picture,
-                    EXISTS (
-                        SELECT 1 
-                        FROM PostLikes 
-                        WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
-                    ) as liked 
-                FROM Posts
-                LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
-                LEFT JOIN Tags ON PostTags.TagId = Tags.Id
-                JOIN Users ON Posts.UserId = Users.Id
-                GROUP BY Posts.Id
-            ");
-            $stmt->execute([$_SESSION['user_id']]); // Pass logged-in UserId
-            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
-        }
+            try {
+                $categoryId = $_GET['categoryId'] ?? null; // Get categoryId from query parameter
+                $tagId = $_GET['tagId'] ?? null; // Get tagId from query parameter
+        
+                if ($id) {
+                    // Get a single post with user info
+                    $stmt = $pdo->prepare("
+                        SELECT 
+                            Posts.*, 
+                            GROUP_CONCAT(Tags.Name) as Tags, 
+                            Users.Username,
+                            Users.Profile_Picture,
+                            Categories.Name as Category, 
+                            EXISTS (
+                                SELECT 1 
+                                FROM PostLikes 
+                                WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
+                            ) as liked 
+                        FROM Posts
+                        LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
+                        LEFT JOIN Tags ON PostTags.TagId = Tags.Id
+                        LEFT JOIN Categories ON Posts.CategoryId = Categories.Id
+                        JOIN Users ON Posts.UserId = Users.Id
+                        WHERE Posts.Id = ?
+                        GROUP BY Posts.Id
+                    ");
+                    $stmt->execute([$_SESSION['user_id'], $id]); // Pass logged-in UserId
+                    $post = $stmt->fetch(PDO::FETCH_ASSOC);
+                    echo json_encode($post ?: ['error' => 'Post not found']);
+                } else {
+                    // Get all posts with user info, filtering by categoryId and/or tagId
+                    $query = "
+                        SELECT 
+                            Posts.*, 
+                            GROUP_CONCAT(Tags.Name) as Tags, 
+                            Users.Username, 
+                            Users.Profile_Picture,
+                            Categories.Name as Category, 
+                            EXISTS (
+                                SELECT 1 
+                                FROM PostLikes 
+                                WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
+                            ) as liked 
+                        FROM Posts
+                        LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
+                        LEFT JOIN Tags ON PostTags.TagId = Tags.Id
+                        LEFT JOIN Categories ON Posts.CategoryId = Categories.Id
+                        JOIN Users ON Posts.UserId = Users.Id
+                    ";
+        
+                    $conditions = []; // Array to hold conditions
+                    $params = [$_SESSION['user_id']]; // Array to hold query parameters
+        
+                    if ($categoryId) {
+                        $conditions[] = "Posts.CategoryId = ?";
+                        $params[] = $categoryId;
+                    }
+        
+                    if ($tagId) {
+                        $conditions[] = "PostTags.TagId = ?";
+                        $params[] = $tagId;
+                    }
+        
+                    if ($conditions) {
+                        $query .= " WHERE " . implode(" AND ", $conditions);
+                    }
+        
+                    $query .= " GROUP BY Posts.Id";
+        
+                    $stmt = $pdo->prepare($query);
+                    $stmt->execute($params);
+        
+                    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
             } catch (Exception $e) {
                 http_response_code(500);
                 echo json_encode(['error' => $e->getMessage()]);
             }
             break;
+        
         case 'POST':
             try {
                 $data = json_decode(file_get_contents('php://input'), true);
@@ -491,32 +520,31 @@ function handlePosts($pdo, $method, $id) {
                 else {
                     // Handle new post creation
                     $userId = $data['UserId'] ?? null;
-        $title = $data['Title'] ?? null;
-        $description = $data['Description'] ?? null;
-
-        if (!$userId || !$title || !$description) {
-            throw new Exception('UserId, Title, and Description are required');
-        }
-
-        $stmt = $pdo->prepare("INSERT INTO Posts (UserId, Title, Description, Status) VALUES (?, ?, ?, 'Published')");
-        $stmt->execute([$userId, $title, $description]);
-        $postId = $pdo->lastInsertId();
-
-        if (!empty($data['TagId']) && is_array($data['TagId'])) {
-            $tagStmt = $pdo->prepare("INSERT INTO PostTags (PostId, TagId) VALUES (?, ?)");
-            foreach ($data['TagId'] as $tagId) {
-                $tagStmt->execute([$postId, $tagId]);
-            }
-        }
-
-        echo json_encode(['message' => 'Post created', 'PostId' => $postId]);
-        }
+                    $title = $data['Title'] ?? null;
+                    $description = $data['Description'] ?? null;
+                    $categoryId = $data['CategoryId'] ?? null; // Fetch the CategoryId from the request
+                
+                    if (!$userId || !$title || !$description) {
+                        throw new Exception('UserId, Title, and Description are required');
+                    }
+                
+                    $stmt = $pdo->prepare("INSERT INTO Posts (UserId, Title, Description, Status, CategoryId) VALUES (?, ?, ?, 'Published', ?)");
+                    $stmt->execute([$userId, $title, $description, $categoryId]);
+                    $postId = $pdo->lastInsertId();
+                
+                    if (!empty($data['Tags']) && is_array($data['Tags'])) {
+                        $tagStmt = $pdo->prepare("INSERT INTO PostTags (PostId, TagId) VALUES (?, ?)");
+                        foreach ($data['Tags'] as $tagId) {
+                            $tagStmt->execute([$postId, $tagId]);
+                        }
+                    } 
+                    echo json_encode(['message' => 'Post created', 'PostId' => $postId]);
+                }
             } catch (Exception $e) {
                 http_response_code(400);
                 echo json_encode(['error' => $e->getMessage()]);
-            }
-            break;
-
+            }   
+            break;             
         case 'PUT':
             if (!$id) {
                 http_response_code(400);
