@@ -81,8 +81,8 @@
                             <h4 class="footer-title">Company</h4>
                             <div class="footer-menu">
                                 <ul>
-                                    <li><a href="about.html">About</a></li>
-                                    <li><a href="contact.html">Contact us</a></li>
+                                    <li><a href="index.php#about">About</a></li>
+                                    <li><a href="contact.php">Contact us</a></li>
                                 </ul>
                             </div>
                         </div>
@@ -93,7 +93,7 @@
                             <div class="footer-menu">
                                 <ul>
                                     <li><a href = "index.php">Home</a><li>
-                                    <li><a href="about.html">Terms & Conditions</a></li>
+                                    <li><a href="index.php#about">Terms & Conditions</a></li>
                                 </ul>
                             </div>
                         </div>

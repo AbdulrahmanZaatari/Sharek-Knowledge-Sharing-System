@@ -7,20 +7,121 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
 
 <div class="container">
     <div class="qa-header">
-        <h1>Questions & Answers</h1>
+        <h1>Welcome to the Posts Page!</h1>
         <button class="create-post-btn" onclick="openModal()">Create New Post</button>
     </div>
     <div class="filters">
-    <select id="filterCategory" onchange="filterPosts()">
-        <option value="" selected>All Categories</option>
-        <!-- Categories will be dynamically loaded -->
-    </select>
+        <select id="filterCategory" onchange="filterPosts()">
+            <option value="" selected>All Categories</option>
+            <!-- Categories will be dynamically loaded -->
+        </select>
 
-    <select id="filterTag" onchange="filterPosts()">
-        <option value="" selected>All Tags</option>
-        <!-- Tags will be dynamically loaded -->
-    </select>
-</div>
+        <select id="filterTag" onchange="filterPosts()">
+            <option value="" selected>All Tags</option>
+            <!-- Tags will be dynamically loaded -->
+        </select>
+
+        <!-- Sort By dropdown -->
+        <select id="sortOrder" onchange="filterPosts()">
+            <option value="desc" selected>Newest</option>
+            <option value="asc">Oldest</option>
+            <option value="likes">Most Liked</option>
+        </select>
+
+        <style>
+            .filters {
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+
+            .filters select {
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+                color: #333;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            .filters select:focus {
+                border-color: #007bff;
+                outline: none;
+                background-color: #fff;
+                box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+            }
+            .filters select,
+            #searchBar {
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #ddd;
+                margin-bottom: 50px;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+                color: #333;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                width: 100px; /* Added width for the search bar */
+                height: 50px;
+            }
+
+            .filters select:focus,
+            #searchBar:focus {
+                border-color: #007bff;
+                outline: none;
+                background-color: #fff;
+                box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+            }
+
+            .filters select:hover,
+            #searchBar:hover {
+                background-color: #fff;
+                border-color: #007bff;
+            }
+
+            .filters option {
+                padding: 10px;
+            }
+
+            #searchBar {
+                width: 300px; /* Wider search bar */
+                font-size: 16px;
+                padding: 10px 20px; /* Add padding to make it look more elegant */
+                border-radius: 30px; /* Rounded corners */
+                border: 1px solid #007bff; /* Blue border */
+                background-color: #f1f1f1;
+                transition: all 0.3s ease;
+            }
+
+            #searchBar:focus {
+                border-color: #007bff;
+                box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); /* Add focus shadow */
+            }
+
+            .filters select:hover {
+                background-color: #fff;
+                border-color: #007bff;
+            }
+
+            .filters option {
+                padding: 10px;
+            }
+        </style>
+        
+        <input 
+            type="text" 
+            id="searchBar" 
+            placeholder="Search posts or users..."
+            oninput="searchPosts()"  
+            onkeydown="if(event.key === 'Enter') searchPosts()"
+        >
+    </div>
+
+    <!-- Style ... (unchanged from your snippet) -->
 
     <div id="qa-list">
         <!-- Posts will be loaded dynamically here -->
@@ -38,14 +139,13 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
             <input type="text" id="postTitle" placeholder="Post Title">
             <textarea id="postDescription" placeholder="Post Description"></textarea>
             <select id="postCategory">
-            <option value="" disabled selected>Select Category</option>
-            <!-- Categories will be dynamically loaded -->
-        </select>
-        <select id="postTags" multiple class="select2-tags">
-            <option value="" disabled>Select Tags</option>
-        <!-- Tags will be dynamically loaded -->
-        </select>
-
+                <option value="" disabled selected>Select Category</option>
+                <!-- Categories will be dynamically loaded -->
+            </select>
+            <select id="postTags" multiple class="select2-tags">
+                <option value="" disabled>Select Tags</option>
+                <!-- Tags will be dynamically loaded -->
+            </select>
         </div>
         <div class="modal-footer">
             <button class="cancel-btn" onclick="closeModal()">Cancel</button>
@@ -54,15 +154,29 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
     </div>
 </div>
 
+<!-- jQuery (and optional Select2) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <script>
-    // Fetch posts from the API
-    function loadPosts(categoryId = null, tagId = null) {
+/**
+ * Load posts from the API, allowing for filters & sort.
+ * @param {string|null} categoryId 
+ * @param {string|null} tagId 
+ * @param {string|null} searchQuery 
+ * @param {string|null} sortOrder 
+ */
+function loadPosts(categoryId = null, tagId = null, searchQuery = null, sortOrder = null) {
     let url = `restapi/api.php?resource=posts`;
 
-    if (categoryId || tagId) {
-        const params = new URLSearchParams();
-        if (categoryId) params.append('categoryId', categoryId);
-        if (tagId) params.append('tagId', tagId);
+    // Build query parameters
+    const params = new URLSearchParams();
+    if (categoryId)  params.append('categoryId', categoryId);
+    if (tagId)       params.append('tagId',      tagId);
+    if (searchQuery) params.append('searchQuery', searchQuery);
+    if (sortOrder)   params.append('sort', sortOrder);
+
+    // If we have any params, append them
+    if ([...params].length > 0) {
         url += `&${params.toString()}`;
     }
 
@@ -82,6 +196,7 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
                 return;
             }
 
+            // Render each post
             data.forEach(post => {
                 const qaContainer = document.createElement('div');
                 qaContainer.className = 'qa-container';
@@ -96,18 +211,18 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
                             <img src="${profilePicture}" alt="Profile Picture" class="profile-pic">
                             <span class="user-name">${post.Username}</span>
                         </div>
-
                         <h2 class="post-title">
                             <a href="postDetails.php?postId=${post.Id}" class="post-link">${post.Title}</a>
                         </h2>
-
                         <hr class="post-divider">
                         <div class="post-content"><b> Content: ${post.Description}</b></div>
                         <div class="post-tags">
-                            <span class="category-pill">Category: ${post.Category || 'Category: None'}, </span>
-                            Tags: ${post.Tags && post.Tags.length 
-                                ? post.Tags.split(',').join(', ') 
-                                : 'None'}
+                            <span class="category-pill">Category: ${post.Category || 'Category: None'}</span>
+                            <span class="tag-pill">Tags: ${
+                                post.Tags && post.Tags.length 
+                                ? post.Tags.split(',').join(', ')
+                                : 'None'
+                            }</span>
                         </div>
                         <div class="qa-meta">
                             Posted on: ${new Date(post.CreatedAt).toLocaleDateString()}
@@ -128,14 +243,40 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
         .catch(error => {
             console.error('Error fetching posts:', error);
             const qaList = document.getElementById('qa-list');
-            qaList.innerHTML = '<p>Error loading posts. Please try again later.</p>';
+            qaList.innerHTML = `<p>Error loading posts: ${error.message}</p>`;
         });
 }
 
+/**
+ * Called when category, tag, or sort changes
+ */
+function filterPosts() {
+    const filterCategory = document.getElementById('filterCategory').value;
+    const filterTag      = document.getElementById('filterTag').value;
+    const sortOrder      = document.getElementById('sortOrder').value;
 
-    // Like or unlike a post
-    function toggleLike(postId, button) {
-    const liked = button.classList.contains('liked'); // Check if the post is already liked
+    // We do NOT pass searchQuery here, so pass null or an empty string
+    // (We assume user hasn't typed anything in the search bar if they're changing filters)
+    loadPosts(filterCategory, filterTag, null, sortOrder);
+}
+
+/**
+ * Called on every keystroke (and Enter) in the search bar
+ * - We also pass the current filterCategory, filterTag, and sortOrder
+ *   so that searching does NOT reset them.
+ */
+function searchPosts() {
+    const searchQuery    = document.getElementById('searchBar').value;
+    const filterCategory = document.getElementById('filterCategory').value;
+    const filterTag      = document.getElementById('filterTag').value;
+    const sortOrder      = document.getElementById('sortOrder').value;
+
+    loadPosts(filterCategory, filterTag, searchQuery, sortOrder);
+}
+
+// Like or unlike a post
+function toggleLike(postId, button) {
+    const liked     = button.classList.contains('liked');
     const increment = !liked; // Increment if not liked, decrement if already liked
 
     if (!USER_ID) {
@@ -153,21 +294,21 @@ echo "<script>const USER_ID = " . json_encode($_SESSION['user_id'] ?? null) . ";
             increment: increment
         })
     })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update the like count and toggle neon orange
-                const likes = parseInt(button.innerText) + (increment ? 1 : -1); // Adjust likes count
-                button.innerHTML = `${likes} <i class="fa fa-thumbs-up"></i>`;
-                button.classList.toggle('liked'); // Toggle the neon border
-            } else {
-                console.error("Error:", data.error);
-                alert(data.error);
-            }
-        })
-        .catch(error => console.error("Error liking or unliking post:", error));
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const likes = parseInt(button.innerText) + (increment ? 1 : -1);
+            button.innerHTML = `${likes} <i class="fa fa-thumbs-up"></i>`;
+            button.classList.toggle('liked');
+        } else {
+            console.error("Error:", data.error);
+            alert(data.error);
+        }
+    })
+    .catch(error => console.error("Error liking/unliking post:", error));
 }
 
+// Load categories and tags for the filters & post creation modal
 function loadCategoriesAndTags() {
     // Load Categories
     fetch('restapi/api.php?resource=categories')
@@ -175,23 +316,27 @@ function loadCategoriesAndTags() {
         .then(categories => {
             const categoryFilter = document.getElementById('filterCategory');
             const categorySelect = document.getElementById('postCategory');
-            categories.forEach(category => {
-                const option = document.createElement('option');
-                option.value = category.Id;
-                option.textContent = category.Name;
-                categoryFilter.appendChild(option);
 
-                const postOption = document.createElement('option');
-                postOption.value = category.Id;
-                postOption.textContent = category.Name;
-                categorySelect.appendChild(postOption);
+            categories.forEach(category => {
+                // Filter dropdown
+                const optionFilter = document.createElement('option');
+                optionFilter.value = category.Id;
+                optionFilter.textContent = category.Name;
+                categoryFilter.appendChild(optionFilter);
+
+                // "Create Post" dropdown
+                const optionCreate = document.createElement('option');
+                optionCreate.value = category.Id;
+                optionCreate.textContent = category.Name;
+                categorySelect.appendChild(optionCreate);
             });
         });
 
-    // Load Tags for Filtering
+    // Load Tags
     fetch('restapi/api.php?resource=tags')
         .then(response => response.json())
         .then(tags => {
+            // Tag filter
             const tagFilter = document.getElementById('filterTag');
             tags.forEach(tag => {
                 const option = document.createElement('option');
@@ -199,63 +344,65 @@ function loadCategoriesAndTags() {
                 option.textContent = tag.Name;
                 tagFilter.appendChild(option);
             });
+
+            // "Create Post" tags
+            const postTagsSelect = document.getElementById('postTags');
+            tags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag.Id;
+                option.textContent = tag.Name;
+                postTagsSelect.appendChild(option);
+            });
+
+            // If using Select2 for multiple tags:
+            $('.select2-tags').select2({
+                placeholder: 'Select Tags',
+                allowClear: true,
+                closeOnSelect: false,
+                width: '100%'
+            });
+
+            // Optionally turn the tag filter into Select2 as well:
+            $('#filterTag').select2({
+                placeholder: 'All Tags',
+                allowClear: true,
+                width: '100%'
+            });
         })
-        .catch(error => console.error('Error loading tags for filtering:', error));
-
-    // Initialize Select2 for the tags dropdown in modal
-    $(document).ready(function () {
-        $('.select2-tags').select2({
-            placeholder: 'Select Tags',
-            allowClear: true,
-            closeOnSelect: false, // Keep the dropdown open for multiple selections
-            width: '100%' // Adjust width to fit the container
-        });
-
-        // Reinitialize Select2 for Filter Tags
-        $('#filterTag').select2({
-            placeholder: 'All Tags',
-            allowClear: true,
-            width: '100%' // Adjust width to fit the container
-        });
-    });
+        .catch(error => console.error('Error loading tags:', error));
 }
 
-
-function filterPosts() {
-    const filterCategory = document.getElementById('filterCategory').value;
-    const filterTag = document.getElementById('filterTag').value;
-    loadPosts(filterCategory, filterTag);
+/** 
+ * Modal handling
+ */
+function openModal() {
+    document.getElementById('createPostModal').style.display = 'flex';
+    document.body.classList.add('modal-active');
 }
 
+function closeModal() {
+    document.getElementById('createPostModal').style.display = 'none';
+    document.body.classList.remove('modal-active');
+}
 
-    // Modal handling
-    function openModal() {
-        document.getElementById('createPostModal').style.display = 'flex';
-        document.body.classList.add('modal-active');
-    }
-
-    function closeModal() {
-        document.getElementById('createPostModal').style.display = 'none';
-        document.body.classList.remove('modal-active');
-    }
-
-    function createPost() {
-    const title = document.getElementById('postTitle').value;
+/**
+ * Create a new post
+ */
+function createPost() {
+    const title       = document.getElementById('postTitle').value;
     const description = document.getElementById('postDescription').value;
-    const category = document.getElementById('postCategory').value;
-    const tags = $('#postTags').val();
+    const category    = document.getElementById('postCategory').value;
+    const tags        = $('#postTags').val();
 
     if (!title || !description || !category) {
         alert('Title, description, and category are required.');
         return;
     }
-
     if (!USER_ID) {
-        alert('User is not logged in.');
+        alert('You must be logged in to create a post.');
         return;
     }
 
-    // Save the post via API
     fetch('restapi/api.php?resource=posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -263,30 +410,29 @@ function filterPosts() {
             UserId: USER_ID,
             Title: title,
             Description: description,
-            CategoryId: category, // Pass the selected category
-            Tags: tags // Pass selected tags
-        }
-    
-    )
-        
-    })
-        
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                console.error('Error:', data.error);
-                alert(`Error: ${data.error}`);
-            } else {
-                console.log('Selected Tags:', tags);
-                alert('Post created successfully!');
-                location.reload();
-            }
+            CategoryId: category,
+            Tags: tags
         })
-        .catch(error => console.error('Error creating post:', error));
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            console.error('Error:', data.error);
+            alert(`Error: ${data.error}`);
+        } else {
+            console.log('Selected Tags:', tags);
+            alert('Post created successfully!');
+            closeModal();
+
+            // Reload the post list (if you want to see the newly created post):
+            // You might also preserve the current filters & sort. For simplicity:
+            loadPosts();
+        }
+    })
+    .catch(error => console.error('Error creating post:', error));
 }
 
-loadPosts();
-// Load categories, tags, and posts on page load
+// On page load
+loadPosts();           // By default => no category, no tag, no search, no sort => fetch all, default server sort
 loadCategoriesAndTags();
-
 </script>

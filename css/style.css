@@ -15452,6 +15452,16 @@ body.modal-active .body-wrapper {
 
 
 
+footer {
+    text-align: center;
+    margin-top: 30px;
+    padding: 10px;
+    background-color: #2e3a59;
+    color: white;
+}
+
+
+
 
 
 

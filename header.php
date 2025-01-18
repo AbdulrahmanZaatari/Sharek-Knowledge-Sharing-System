@@ -79,9 +79,7 @@ session_start();
         <!-- ltn__header-top-area end --> 
         <!-- ltn__header-middle-area start -->
         <div class="ltn__header-middle-area">
-            
             <div class="container">
-                
                 <div class="row">
                     <div class="col">
                         <div class="site-logo">
@@ -142,7 +140,7 @@ session_start();
                                                 <a href="#"><i class="icon-user"></i></a>
                                                 <ul style="width: 320px;">
                                                             <li><a href="account.php">Dashboard</a></li>
-                                                            <li><a href="publicQ&A.php">Questions Page</a></li>
+                                                            <li><a href="publicQ&A.php">Posts</a></li>
                                                             <li><a href="ownerLogin.php">Login as Admin</a></li>
                                                             <li><a href="logout.php">Logout</a></li>
                                                 </ul>
@@ -162,8 +160,7 @@ session_start();
             <div class="container">
                             <style>
                     #google_translate_element {
-                        display: none; /* Initially hide the element */
-                        margin-left: 15px;
+                        display: none;                         margin-left: 15px;
                     }
                 </style>
                 <div id="google_translate_element" style="display: none; margin-left: 15px;"></div>
@@ -204,9 +201,8 @@ session_start();
                                 <div class="ltn__main-menu">
                                     <ul>
                                         <li><a href="index.php">Home</a></li>
-                                        <li><a href="publicQ&A.php">Questions</a></li>
-                                        <li><a href="products_shop.php">Leaderboards</a></li>
-                                        <li><a href="blog.php">Blogs</a></li>
+                                        <li><a href="publicQ&A.php">Posts</a></li>
+                                        <li><a href="leaderboards.php">Leaderboards</a></li>
                                         <li><a href="contact.php">Contact</a></li>
                                     </ul>
                                 </div>

@@ -47,12 +47,8 @@ try {
     }
 
     // Fetch user's posts
-    $user_posts_endpoint = "{$api_base_url}?resource=posts&user_id={$user_id}";
+    $user_posts_endpoint = "{$api_base_url}?resource=posts&user_only=true";
     $user_posts = fetchFromApi($user_posts_endpoint);
-
-    // Fetch public posts
-    $public_posts_endpoint = "{$api_base_url}?resource=posts&user_id!=${user_id}";
-    $public_posts = fetchFromApi($public_posts_endpoint);
 
     // Fetch user achievements
     $achievements_endpoint = "{$api_base_url}?resource=achievements&user_id={$user_id}";
@@ -102,7 +98,6 @@ include("./role_based_header.php");
                                     <div class="nav">
                                         <a class="active show" data-bs-toggle="tab" href="#liton_tab_1_1">Dashboard<i class="fas fa-home"></i></a>
                                         <a data-bs-toggle="tab" href="#liton_tab_1_2">My Posts<i class="fas fa-file-alt"></i></a>
-                                        <a data-bs-toggle="tab" href="#liton_tab_1_3">Public Posts<i class="fas fa-globe"></i></a>
                                         <a data-bs-toggle="tab" href="#liton_tab_1_4">Account Details<i class="fas fa-user"></i></a>
                                     </div>
                                 </div>
@@ -143,25 +138,6 @@ include("./role_based_header.php");
                                             </div>
                                         </div>
                                     </div>
-                                    <!-- Public Posts Tab -->
-                                    <div class="tab-pane fade" id="liton_tab_1_3">
-                                        <div class="ltn__myaccount-tab-content-inner">
-                                            <div class="table-responsive">
-                                                <table class="table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Post ID</th>
-                                                            <th>Title</th>
-                                                            <th>Created At</th>
-                                                            <th>Action</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="public-posts-body">
-                                                        <!-- Public Posts will be loaded dynamically -->
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
                                     </div>
                                     <!-- Account Details Tab -->
                                     <div class="tab-pane fade" id="liton_tab_1_4">
@@ -171,7 +147,7 @@ include("./role_based_header.php");
         <div class="form-group">
             <label>Profile Picture</label>
             <div class="mb-3">
-            <img src="<?php echo 'restapi/' . htmlspecialchars($user['Profile_Picture']); ?>" alt="Profile Picture" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 2px solid #ddd;">
+            <img src="<?php echo 'restapi/' . htmlspecialchars($user['Profile_Picture']); ?>" alt="Profile Picture" style="width: 150px; height: 200px; object-fit: cover; border-radius: 50%; border: 2px solid #ddd;">
             </div>
         </div>
         <form action="update_profile.php" method="POST" enctype="multipart/form-data">
@@ -199,21 +175,26 @@ include("./role_based_header.php");
 
 <script>
     const userPosts = <?php echo json_encode($user_posts); ?>;
-    const publicPosts = <?php echo json_encode($public_posts); ?>;
-
     const myPostsBody = document.getElementById("my-posts-body");
-    const publicPostsBody = document.getElementById("public-posts-body");
 
     function displayPosts(posts, container) {
         container.innerHTML = "";
         if (posts.length > 0) {
             posts.forEach(post => {
+                // Build each row of the table, adding View, Edit, and Delete buttons
                 const row = `
                     <tr>
                         <td>${post.Id}</td>
                         <td>${post.Title}</td>
                         <td>${new Date(post.CreatedAt).toLocaleDateString()}</td>
-                        <td><a href="view_post.php?post_id=${post.PostId}" class="btn btn-primary">View</a></td>
+                        <td>
+                            <!-- View button -->
+                            <a href="postDetails.php?postId=${post.Id}" class="btn btn-primary">View</a>
+                            <!-- Edit button (links to edit_post.php) -->
+                            <a href="edit_post.php?post_id=${post.Id}" class="btn btn-secondary">Edit</a>
+                            <!-- Delete button triggers a JavaScript function -->
+                            <button class="btn btn-danger" onclick="deletePost(${post.Id})">Delete</button>
+                        </td>
                     </tr>
                 `;
                 container.innerHTML += row;
@@ -223,9 +204,55 @@ include("./role_based_header.php");
         }
     }
 
-    displayPosts(userPosts, myPostsBody);
-    displayPosts(publicPosts, publicPostsBody);
+    // This function calls your REST API to fetch the posts
+    async function fetchAndDisplayPosts() {
+        try {
+            const response = await fetch('http://localhost/IDS/restapi/api.php?resource=posts&user_only=true', {
+                method: 'GET',
+                credentials: 'include', // Include cookies if needed
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error fetching posts: ${response.statusText}`);
+            }
+
+            const posts = await response.json();
+            displayPosts(posts, myPostsBody);
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    // Call the function once the page is loaded
+    fetchAndDisplayPosts();
+
+    // DELETE function – calls the REST API to delete a post
+    function deletePost(postId) {
+        if (!confirm('Are you sure you want to delete this post?')) {
+            return; // User canceled deletion
+        }
+        
+        fetch(`http://localhost/IDS/restapi/api.php?resource=posts&id=${postId}`, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to delete post.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(data.message);
+            // Refresh the posts list after deletion
+            fetchAndDisplayPosts();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting post. Please try again.');
+        });
+    }
 </script>
-<?php
-include("./pharmacist_footer.php");
-?>
+

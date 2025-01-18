@@ -45,6 +45,9 @@ switch ($resource) {
     case 'comments':
         handleComments($pdo, $method, $id); 
         break;
+    case 'leaderboard': 
+        getLeaderboard($pdo); 
+        break;
     default:
         http_response_code(404);
         echo json_encode(['error' => 'Resource not found']);
@@ -372,80 +375,141 @@ function handlePosts($pdo, $method, $id) {
     switch ($method) {
         case 'GET':
             try {
-                $categoryId = $_GET['categoryId'] ?? null; // Get categoryId from query parameter
-                $tagId = $_GET['tagId'] ?? null; // Get tagId from query parameter
+                // Debug log of session
+                error_log("Session data in handlePosts: " . print_r($_SESSION, true));
         
+                // --- Extract parameters ---
+                $id          = $id; // single post if present
+                $categoryId  = $_GET['categoryId']  ?? null; 
+                $tagId       = $_GET['tagId']       ?? null;
+                $searchQuery = $_GET['searchQuery'] ?? '';
+                $userId      = $_SESSION['user_id'] ?? null; 
+                $userOnly    = (isset($_GET['user_only']) && $_GET['user_only'] === 'true');
+        
+                // Sorting parameter => 'desc' (default), 'asc', or 'likes'
+                $sortOption  = $_GET['sort'] ?? 'desc';
+        
+                // If you don't store "Likes" in Posts, we can do a subselect:
+                $likeCountSelect = "(SELECT COUNT(*) FROM PostLikes WHERE PostLikes.PostId = Posts.Id) AS LikeCount";
+        
+                // Decide how to ORDER
+                switch ($sortOption) {
+                    case 'asc':
+                        $orderClause = "Posts.CreatedAt ASC";
+                        break;
+                    case 'likes':
+                        $orderClause = "LikeCount DESC";
+                        break;
+                    default:
+                        // 'desc' => newest first
+                        $orderClause = "Posts.CreatedAt DESC";
+                }
+        
+                // If $id is present => single post
                 if ($id) {
-                    // Get a single post with user info
+                    // Single post query
                     $stmt = $pdo->prepare("
                         SELECT 
-                            Posts.*, 
-                            GROUP_CONCAT(Tags.Name) as Tags, 
+                            Posts.*,
+                            GROUP_CONCAT(Tags.Name) AS Tags, 
                             Users.Username,
                             Users.Profile_Picture,
-                            Categories.Name as Category, 
-                            EXISTS (
-                                SELECT 1 
-                                FROM PostLikes 
-                                WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
-                            ) as liked 
+                            Categories.Name AS Category,
+                            CASE WHEN :uid IS NOT NULL THEN EXISTS (
+                                SELECT 1
+                                FROM PostLikes
+                                WHERE PostLikes.UserId = :uid2
+                                  AND PostLikes.PostId = Posts.Id
+                            ) ELSE 0 END AS liked
                         FROM Posts
-                        LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
-                        LEFT JOIN Tags ON PostTags.TagId = Tags.Id
-                        LEFT JOIN Categories ON Posts.CategoryId = Categories.Id
-                        JOIN Users ON Posts.UserId = Users.Id
-                        WHERE Posts.Id = ?
+                        LEFT JOIN PostTags     ON Posts.Id = PostTags.PostId
+                        LEFT JOIN Tags         ON PostTags.TagId = Tags.Id
+                        LEFT JOIN Categories   ON Posts.CategoryId = Categories.Id
+                        JOIN Users             ON Posts.UserId = Users.Id
+                        WHERE Posts.Id = :postId
                         GROUP BY Posts.Id
                     ");
-                    $stmt->execute([$_SESSION['user_id'], $id]); // Pass logged-in UserId
+                    $stmt->bindValue(':uid',   $userId, PDO::PARAM_INT);
+                    $stmt->bindValue(':uid2',  $userId, PDO::PARAM_INT);
+                    $stmt->bindValue(':postId',$id,     PDO::PARAM_INT);
+                    $stmt->execute();
+        
                     $post = $stmt->fetch(PDO::FETCH_ASSOC);
                     echo json_encode($post ?: ['error' => 'Post not found']);
-                } else {
-                    // Get all posts with user info, filtering by categoryId and/or tagId
+                }
+                else {
+                    // Multiple posts query
                     $query = "
-                        SELECT 
-                            Posts.*, 
-                            GROUP_CONCAT(Tags.Name) as Tags, 
-                            Users.Username, 
+                        SELECT
+                            Posts.*,
+                            $likeCountSelect,  /* subselect for total likes */
+                            GROUP_CONCAT(Tags.Name) AS Tags,
+                            Users.Username,
                             Users.Profile_Picture,
-                            Categories.Name as Category, 
-                            EXISTS (
-                                SELECT 1 
-                                FROM PostLikes 
+                            Categories.Name AS Category,
+                            CASE WHEN ? IS NOT NULL THEN EXISTS (
+                                SELECT 1 FROM PostLikes
                                 WHERE PostLikes.UserId = ? AND PostLikes.PostId = Posts.Id
-                            ) as liked 
+                            ) ELSE 0 END as liked
                         FROM Posts
-                        LEFT JOIN PostTags ON Posts.Id = PostTags.PostId
-                        LEFT JOIN Tags ON PostTags.TagId = Tags.Id
+                        LEFT JOIN PostTags   ON Posts.Id = PostTags.PostId
+                        LEFT JOIN Tags       ON PostTags.TagId = Tags.Id
                         LEFT JOIN Categories ON Posts.CategoryId = Categories.Id
-                        JOIN Users ON Posts.UserId = Users.Id
+                        JOIN Users           ON Posts.UserId = Users.Id
                     ";
         
-                    $conditions = []; // Array to hold conditions
-                    $params = [$_SESSION['user_id']]; // Array to hold query parameters
+                    // Build conditions & parameters
+                    $params = [$userId, $userId];
+                    $conditions = [];
         
+                    // 1) Category filter
                     if ($categoryId) {
                         $conditions[] = "Posts.CategoryId = ?";
-                        $params[] = $categoryId;
+                        $params[]     = $categoryId;
                     }
         
+                    // 2) Tag filter
                     if ($tagId) {
                         $conditions[] = "PostTags.TagId = ?";
-                        $params[] = $tagId;
+                        $params[]     = $tagId;
                     }
         
+                    // 3) User-only filter
+                    if ($userOnly && $userId) {
+                        $conditions[] = "Posts.UserId = ?";
+                        $params[]     = $userId;
+                    }
+        
+                    // 4) Search
+                    if ($searchQuery) {
+                        $conditions[] = "(Posts.Title LIKE ? OR Users.Username LIKE ?)";
+                        $params[] = '%' . $searchQuery . '%';
+                        $params[] = '%' . $searchQuery . '%';
+                    }
+        
+                    // If conditions exist, add them
                     if ($conditions) {
                         $query .= " WHERE " . implode(" AND ", $conditions);
                     }
         
-                    $query .= " GROUP BY Posts.Id";
+                    // GROUP BY, then ORDER
+                    $query .= "
+                        GROUP BY Posts.Id
+                        ORDER BY $orderClause
+                    ";
+        
+                    error_log("Query: $query");
+                    error_log("Params: " . print_r($params, true));
         
                     $stmt = $pdo->prepare($query);
                     $stmt->execute($params);
         
-                    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+                    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    echo json_encode($results);
                 }
-            } catch (Exception $e) {
+            }
+            catch (Exception $e) {
+                error_log("handlePosts() exception: " . $e->getMessage());
                 http_response_code(500);
                 echo json_encode(['error' => $e->getMessage()]);
             }
@@ -454,45 +518,55 @@ function handlePosts($pdo, $method, $id) {
         case 'POST':
             try {
                 $data = json_decode(file_get_contents('php://input'), true);
-        
+
                 if (isset($data['action']) && $data['action'] === 'like') {
                     $userId = $data['userId'] ?? null;
                     $postId = $data['postId'] ?? null;
                     $increment = $data['increment'] ?? true; // true to like, false to unlike
-        
+
                     if (!$userId || !$postId) {
                         throw new Exception('UserId and PostId are required for the like action.');
                     }
-        
+
                     if ($increment) {
                         // Add a like
                         $stmt = $pdo->prepare("SELECT * FROM PostLikes WHERE UserId = ? AND PostId = ?");
                         $stmt->execute([$userId, $postId]);
-        
+
                         if ($stmt->rowCount() > 0) {
                             throw new Exception('You have already liked this post.');
                         }
-        
+
                         $stmt = $pdo->prepare("INSERT INTO PostLikes (UserId, PostId) VALUES (?, ?)");
                         $stmt->execute([$userId, $postId]);
-        
+
                         $stmt = $pdo->prepare("UPDATE Posts SET Likes = Likes + 1 WHERE Id = ?");
                         $stmt->execute([$postId]);
+
+                        // Add 1 point to the user for the like
+                        $stmt = $pdo->prepare("UPDATE Users SET Points = Points + 1 WHERE Id = ?");
+                        $stmt->execute([$userId]);
+
                         echo json_encode(['message' => 'Like added successfully', 'success' => true]);
                     } else {
                         // Remove a like
                         $stmt = $pdo->prepare("SELECT * FROM PostLikes WHERE UserId = ? AND PostId = ?");
                         $stmt->execute([$userId, $postId]);
-        
+
                         if ($stmt->rowCount() === 0) {
                             throw new Exception('You have not liked this post.');
                         }
-        
+
                         $stmt = $pdo->prepare("DELETE FROM PostLikes WHERE UserId = ? AND PostId = ?");
                         $stmt->execute([$userId, $postId]);
-        
+
                         $stmt = $pdo->prepare("UPDATE Posts SET Likes = Likes - 1 WHERE Id = ?");
                         $stmt->execute([$postId]);
+
+                        // Subtract 1 point from the user for the like removal
+                        $stmt = $pdo->prepare("UPDATE Users SET Points = Points - 1 WHERE Id = ?");
+                        $stmt->execute([$userId]);
+
                         echo json_encode(['message' => 'Like removed successfully', 'success' => true]);
                     }
                 } elseif (isset($data['action']) && $data['action'] === 'comment') {
@@ -501,50 +575,63 @@ function handlePosts($pdo, $method, $id) {
                     if (!$id) {
                         throw new Exception('Post ID is required for comment action');
                     }
-        
+
                     $comment = $data['comment'] ?? null;
                     if (!$comment) {
                         throw new Exception('Comment text is required');
                     }
-        
+
                     // Insert comment into the Comments table
                     $stmt = $pdo->prepare("INSERT INTO Comments (PostId, CommentText, CreatedAt) VALUES (?, ?, NOW())");
                     $stmt->execute([$id, $comment]);
-        
+
                     // Increment the Comments count in the Posts table
                     $stmt = $pdo->prepare("UPDATE Posts SET Comments = Comments + 1 WHERE Id = ?");
                     $stmt->execute([$id]);
-        
+
+                    // Add 2 points to the post's author
+                    $stmt = $pdo->prepare("SELECT UserId FROM Posts WHERE Id = ?");
+                    $stmt->execute([$id]);
+                    $postOwner = $stmt->fetch(PDO::FETCH_ASSOC)['UserId'];
+
+                    $stmt = $pdo->prepare("UPDATE Users SET Points = Points + 2 WHERE Id = ?");
+                    $stmt->execute([$postOwner]);
+
                     echo json_encode(['message' => 'Comment added', 'success' => true]);
-                } 
-                else {
+                } else {
                     // Handle new post creation
                     $userId = $data['UserId'] ?? null;
                     $title = $data['Title'] ?? null;
                     $description = $data['Description'] ?? null;
                     $categoryId = $data['CategoryId'] ?? null; // Fetch the CategoryId from the request
-                
+
                     if (!$userId || !$title || !$description) {
                         throw new Exception('UserId, Title, and Description are required');
                     }
-                
+
                     $stmt = $pdo->prepare("INSERT INTO Posts (UserId, Title, Description, Status, CategoryId) VALUES (?, ?, ?, 'Published', ?)");
                     $stmt->execute([$userId, $title, $description, $categoryId]);
                     $postId = $pdo->lastInsertId();
-                
+
                     if (!empty($data['Tags']) && is_array($data['Tags'])) {
                         $tagStmt = $pdo->prepare("INSERT INTO PostTags (PostId, TagId) VALUES (?, ?)");
                         foreach ($data['Tags'] as $tagId) {
                             $tagStmt->execute([$postId, $tagId]);
                         }
-                    } 
+                    }
+
+                    // Add 5 points to the user for creating the post
+                    $stmt = $pdo->prepare("UPDATE Users SET Points = Points + 5 WHERE Id = ?");
+                    $stmt->execute([$userId]);
+
                     echo json_encode(['message' => 'Post created', 'PostId' => $postId]);
                 }
             } catch (Exception $e) {
                 http_response_code(400);
                 echo json_encode(['error' => $e->getMessage()]);
-            }   
-            break;             
+            }
+            break;
+
         case 'PUT':
             if (!$id) {
                 http_response_code(400);
@@ -765,5 +852,22 @@ function handlePolls($pdo, $method, $id) {
                 echo json_encode(['error' => 'Method not allowed']);
                 break;
         }
+        function getLeaderboard($pdo) {
+            try {
+                // Query to get top 10 users ordered by points
+                $stmt = $pdo->query("SELECT Id, Username, Points FROM Users ORDER BY Points DESC LIMIT 10");
+                $leaderboard = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+                if ($leaderboard) {
+                    echo json_encode(['leaderboard' => $leaderboard]);
+                } else {
+                    http_response_code(404);
+                    echo json_encode(['error' => 'No users found']);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode(['error' => $e->getMessage()]);
+            }
+        }        
     }    
 ?>
