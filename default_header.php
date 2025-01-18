@@ -138,7 +138,7 @@ session_start();
                                                 <ul style="width: 320px;">
                                                             <li><a href="login.php">Log in</a></li>
                                                             <li><a href="register.php">Register</a></li>
-                                                            <li><a href="sendMessage.php">Posts</a></li>
+                                                            <li><a href="publicQ&A.php">Posts</a></li>
                                                 </ul>
                                             </li>
                                         </ul>
@@ -198,7 +198,7 @@ session_start();
                                 <div class="ltn__main-menu">
                                     <ul>
                                         <li><a href="index.php">Home</a></li>
-                                        <li><a href="publicQ&A.php">Questions</a></li>
+                                        <li><a href="publicQ&A.php">Posts</a></li>
                                         <li><a href="leaderboards.php">Leaderboards</a></li>
                                         <li><a href="contact.php">Contact</a></li>
                                     </ul>
