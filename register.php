@@ -90,5 +90,7 @@ document.getElementById('registerForm').addEventListener('submit', async functio
     }
 });
 </script>
-
+<footer>
+<p>&copy; 2025 Share|K. All rights reserved.</p>
+</footer>
 <?php include("./footer.php"); ?>

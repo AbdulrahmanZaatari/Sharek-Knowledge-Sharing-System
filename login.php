@@ -187,5 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         background-position: center;
     }
 </style>
-
+<footer>
+<p>&copy; 2025 Share|K. All rights reserved.</p>
+</footer>
 <?php include("./footer.php"); ?>

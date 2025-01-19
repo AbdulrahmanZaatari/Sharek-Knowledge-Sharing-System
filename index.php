@@ -128,7 +128,7 @@ include("./role_based_header.php")
         </div>
     </div>
 </div>
+<footer>
+<p>&copy; 2025 Share|K. All rights reserved.</p>
+</footer>
 <!-- TESTIMONIAL AREA END -->
-<?php
-include("./footer.php")
-?>

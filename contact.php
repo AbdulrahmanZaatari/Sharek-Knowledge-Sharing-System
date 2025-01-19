@@ -99,6 +99,9 @@ include("./role_based_header.php")
     </div>
 </div>
 <!-- CONTACT MESSAGE AREA END -->
+<footer>
+<p>&copy; 2025 Share|K. All rights reserved.</p>
+</footer>
 <?php
 include("./footer.php")
 ?>
