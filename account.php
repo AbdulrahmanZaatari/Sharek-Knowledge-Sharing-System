@@ -9,7 +9,7 @@ if (!isset($_SESSION['email'])) {
 // Fetch logged-in user's email and ID from session
 $user_email = $_SESSION['email'];
 $user_id = $_SESSION['user_id'];
-
+$role = $_SESSION['role'];
 // API endpoint
 $api_base_url = "http://localhost/IDS/restapi/api.php";
 
@@ -47,7 +47,11 @@ try {
     }
 
     // Fetch user's posts
-    $user_posts_endpoint = "{$api_base_url}?resource=posts&user_only=true";
+    if ($role === 'Admin') {
+        $user_posts_endpoint = "{$api_base_url}?resource=posts";
+    } else {
+        $user_posts_endpoint = "{$api_base_url}?resource=posts&user_only=true";
+    }
     $user_posts = fetchFromApi($user_posts_endpoint);
 
     // Fetch user achievements
@@ -114,7 +118,7 @@ include("./role_based_header.php");
                                                 You can <a href="logout.php" style="color: #007bff; text-decoration: underline; font-weight: bold;">log out</a> directly from here.
                                             </p>
                                             <p style="font-size: 16px; line-height: 1.6;">
-                                                From your account dashboard, you can view your posts, public posts, and edit your account details.
+                                                From your account dashboard, you can view your posts and edit your account details.
                                             </p>
                                         </div>
                                     </div>
@@ -205,9 +209,17 @@ include("./role_based_header.php");
     }
 
     // This function calls your REST API to fetch the posts
+    const role = "<?php echo $role; ?>";
+    let fetchEndpoint;
+
+    if (role === 'Admin') {
+        fetchEndpoint = "http://localhost/IDS/restapi/api.php?resource=posts";
+    } else {
+        fetchEndpoint = "http://localhost/IDS/restapi/api.php?resource=posts&user_only=true";
+    }
     async function fetchAndDisplayPosts() {
         try {
-            const response = await fetch('http://localhost/IDS/restapi/api.php?resource=posts&user_only=true', {
+            const response = await fetch(fetchEndpoint, {
                 method: 'GET',
                 credentials: 'include', // Include cookies if needed
                 headers: {

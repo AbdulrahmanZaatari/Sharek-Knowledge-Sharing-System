@@ -141,7 +141,6 @@ session_start();
                                                 <ul style="width: 320px;">
                                                             <li><a href="account.php">Dashboard</a></li>
                                                             <li><a href="publicQ&A.php">Posts</a></li>
-                                                            <li><a href="ownerLogin.php">Login as Admin</a></li>
                                                             <li><a href="logout.php">Logout</a></li>
                                                 </ul>
                                             </li>

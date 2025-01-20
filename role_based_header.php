@@ -8,7 +8,7 @@ switch ($role) {
         include('header.php');
         break;
     case 'Admin':
-        include('owner_header.php');
+        include('header.php');
         break;
     default:
         include('default_header.php');
